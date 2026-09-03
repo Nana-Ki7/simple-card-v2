@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <chrono>
 #include <cstdint>
+#include <type_traits>
 #include <ctime>
 #include <iomanip>
 #include <iostream>
@@ -35,8 +36,23 @@ constexpr uint16_t kListenPort    = 9002;
 constexpr uint32_t kTurnTimeoutMs = 30000;
 
 server_t*                g_srv = nullptr;
-websocketpp::lib::asio::io_service* g_io = nullptr;
 std::mt19937_64          g_rng{std::random_device{}()};
+
+// ---- 兼容新旧 websocketpp/asio ----
+// 新版 (standalone asio): 有 get_io_context()，无 io_service 旧名
+// 旧版 (boost asio):      有 get_io_service()
+template <typename S>
+struct has_io_context {
+    template <typename T> static auto check(int)
+        -> decltype(std::declval<T&>().get_io_context(), std::true_type{});
+    template <typename> static auto check(...) -> std::false_type;
+    static constexpr bool value = decltype(check<S>(0))::value;
+};
+template <typename S>
+decltype(auto) get_server_io(S& s) {
+    if constexpr (has_io_context<S>::value) return s.get_io_context();
+    else return s.get_io_service();
+}
 uint64_t                 g_room_seq = 0;
 
 struct Player {
@@ -48,13 +64,13 @@ struct Player {
 };
 
 struct Room {
-    explicit Room(std::string id_) : id(std::move(id_)), timer(*g_io) {}
+    explicit Room(std::string id_) : id(std::move(id_)) {}
     std::string id;
     bool started  = false;
     bool finished = false;
     Player* seats[4] = {nullptr, nullptr, nullptr, nullptr};
     game::GameState gs;
-    io_timer  timer;
+    std::shared_ptr<io_timer> timer;
     uint64_t  timer_gen = 0;
     uint64_t  seq = 0;
 };
@@ -168,13 +184,14 @@ json room_update_msg(Room* room) {
 void broadcast_room_update(Room* room) { broadcast(room, room_update_msg(room)); }
 
 void on_turn_timeout(Room* room);
-void stop_turn_timer(Room* room) { ++room->timer_gen; room->timer.cancel(); }
+void stop_turn_timer(Room* room) { ++room->timer_gen; if (room->timer) room->timer->cancel(); }
 void arm_turn_timer(Room* room, uint32_t timeout_ms) {
     stop_turn_timer(room);
     const uint64_t gen = room->timer_gen;
     const std::string room_id = room->id;
-    room->timer.expires_after(std::chrono::milliseconds(timeout_ms));
-    room->timer.async_wait([room_id, gen](const err_code& ec) {
+    if (!room->timer) room->timer = std::make_shared<io_timer>(get_server_io(*g_srv));
+    room->timer->expires_after(std::chrono::milliseconds(timeout_ms));
+    room->timer->async_wait([room_id, gen](const err_code& ec) {
         if (ec) return;
         auto it = g_rooms.find(room_id);
         if (it == g_rooms.end()) return;
@@ -620,7 +637,7 @@ int main() {
     srv.set_access_channels(websocketpp::log::alevel::none);
     srv.set_error_channels(websocketpp::log::elevel::none);
     srv.init_asio();
-    g_io = &srv.get_io_service();  // 本环境 API: get_io_service()
+    // io 上下文通过 get_server_io(*g_srv) 按需获取（兼容新旧 websocketpp/asio）
 
     srv.set_open_handler(&on_open);
     srv.set_close_handler(&on_close);
