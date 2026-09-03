@@ -211,6 +211,7 @@ class Bot:
         self.finish_order = []
         self.games_done = 0
         self.stop_flag = False
+        self.start_delay = 0.0
 
     def log(self, text):
         seat = self.seat if self.seat is not None else "-"
@@ -333,6 +334,8 @@ class Bot:
                 await self.do_play(ws, move)
 
     async def run(self, deadline=None):
+        if self.start_delay:
+            await asyncio.sleep(self.start_delay)  # 错峰启动，避免并发握手竞态
         uri = f"ws://{self.host}:{self.port}"
         backoff = 1.0
         while not self.should_stop():
@@ -597,6 +600,8 @@ async def main():
         shared = {"room_id": None, "room_evt": asyncio.Event(), "stop": asyncio.Event()}
         bots = [Bot(n, args.host, args.port, args.mode, None, 1,
                     shared=shared, creator=(i == 0)) for i, n in enumerate(names)]
+        for i, b in enumerate(bots):
+            b.start_delay = i * 0.5  # AI1 立即，AI2 0.5s，AI3 1.0s，AI4 1.5s 后连
         print(f"== autofill：{', '.join(names)} → ws://{args.host}:{args.port} ==")
         results = await asyncio.gather(*(b.run(deadline) for b in bots), return_exceptions=True)
         for b, r in zip(bots, results):
