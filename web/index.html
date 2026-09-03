@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0e0b" />
+<title>SimpleCardGame v2 · 四人扑克</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">♠</text></svg>' />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- 顶部连接状态条 -->
+<header id="conn-bar">
+  <span id="conn-dot" class="dot connecting"></span>
+  <span id="conn-text">连接中…</span>
+  <span id="conn-room" class="muted"></span>
+</header>
+
+<!-- 视图 1：大厅 -->
+<main id="view-lobby" class="view active">
+  <div class="panel">
+    <h1 class="logo">♠ SimpleCardGame <em>v2</em></h1>
+    <p class="sub">♥2 + ♠K = 关键队 · 双持者 1v3 · 同队全员出完获胜</p>
+    <label class="field">
+      <span>昵称</span>
+      <input id="name-input" maxlength="12" autocomplete="off" placeholder="输入昵称（1-12 字）" />
+    </label>
+    <button id="btn-create" type="button" class="btn gold block">创建房间</button>
+    <div class="divider"><span>或</span></div>
+    <label class="field">
+      <span>房间号</span>
+      <input id="room-input" inputmode="numeric" autocomplete="off" placeholder="输入房间号" />
+    </label>
+    <button id="btn-join" type="button" class="btn block">加入房间</button>
+    <p id="lobby-hint" class="hint"></p>
+  </div>
+</main>
+
+<!-- 视图 2：等待房 -->
+<main id="view-waiting" class="view">
+  <div class="panel">
+    <div class="room-no">房间号 <b id="wait-room-id">—</b></div>
+    <p class="sub">把房间号告诉朋友，满 4 人自动开局</p>
+    <div id="seats-grid" class="seats-grid"></div>
+    <p id="wait-hint" class="hint">等待玩家加入…</p>
+    <button id="btn-leave" type="button" class="btn danger block">离开房间</button>
+  </div>
+</main>
+
+<!-- 视图 3：牌桌 -->
+<main id="view-table" class="view">
+  <div id="table">
+    <div class="plate pos-top"    id="plate-top"></div>
+    <div class="plate pos-left"   id="plate-left"></div>
+    <div class="plate pos-right"  id="plate-right"></div>
+    <div class="plate pos-bottom" id="plate-bottom"></div>
+
+    <div id="center">
+      <div id="round-info" class="muted small"></div>
+      <div id="center-play"></div>
+      <div id="turn-pill" class="pill idle"></div>
+    </div>
+
+    <div id="fin-banner" class="hidden">✔ 已出完 · 等待队友</div>
+
+    <div id="action-bar">
+      <button id="btn-play" type="button" class="btn gold big" disabled>出牌</button>
+      <button id="btn-pass" type="button" class="btn big" disabled>不出</button>
+    </div>
+
+    <div id="hand-wrap"><div id="hand"></div></div>
+  </div>
+</main>
+
+<!-- 视图 4：结算覆盖层 -->
+<div id="overlay-result" class="overlay hidden">
+  <div class="panel result-panel">
+    <div id="result-title" class="result-title"></div>
+    <div id="result-sub" class="sub"></div>
+    <ol id="result-order"></ol>
+    <div id="result-teams"></div>
+    <button id="btn-again" type="button" class="btn gold big block">再来一局</button>
+    <p class="hint">将刷新页面并使用本地 token 自动重连</p>
+  </div>
+</div>
+
+<!-- 全局提示 -->
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
