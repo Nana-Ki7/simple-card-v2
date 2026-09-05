@@ -77,6 +77,7 @@ function handleMsg(m){
     case 'round_end': onRoundEnd(m); break;
     case 'game_over': onGameOver(m); break;
     case 'player_conn': onPlayerConn(m); break;
+    case 'bots_added': onBotsAdded(m); break;
     case 'left_room': onLeftRoom(m); break;
     case 'error': onError(m); break;
   }
@@ -99,7 +100,7 @@ function onRoomState(m){
   if(S.phase==='playing')showView('table'); else showView('waiting');
   renderWaiting(); renderTable();
 }
-function onRoomUpdate(m){ if(m.room_id!==S.roomId)return; S.players={}; (m.players||[]).forEach(p=>{ S.players[p.seat]={name:p.name,connected:p.connected!==false}; }); renderWaiting(); renderTable(); }
+function onRoomUpdate(m){ if(m.room_id!==S.roomId)return; S.players={}; (m.players||[]).forEach(p=>{ S.players[p.seat]={name:p.name,connected:p.connected!==false,bot:!!p.bot}; }); renderWaiting(); renderTable(); }
 function onGameStarted(m){
   S.phase='playing'; S.passedSeats.clear(); S.finishedSeats.clear(); S.revealed={}; S.lastPlay=null; S.selected.clear(); S.teams=null;
   S.handCounts=[13,13,13,13]; hideResult(); showView('table');
@@ -150,6 +151,14 @@ function onPlayerConn(m){
   if(m.seat===S.mySeat)toast(m.connected?'连接已恢复':'连接已断开，座位为你保留');
 }
 function onLeftRoom(m){ if(m.room_id!=null&&S.roomId!=null&&m.room_id!==S.roomId)return; resetRoomState(); setUrlRoom(null); setConnRoom(); showView('lobby'); toast('已离开房间'); }
+function onBotsAdded(m){
+  if(m.room_id!=null&&S.roomId!=null&&m.room_id!==S.roomId)return;
+  if(Array.isArray(m.players))m.players.forEach(p=>{
+    S.players[p.seat]={name:p.name,connected:true,bot:p.bot!==false};
+  });
+  renderWaiting();
+  toast('已添加 AI 玩家 🤖');
+}
 function resetRoomState(){
   S.roomId=null; S.mySeat=null; S.phase='idle'; S.players={};
   S.hand=[]; S.selected.clear(); S.turnSeat=null; S.roundSeq=0; S.canPass=false;
@@ -185,17 +194,22 @@ function renderWaiting(){
   if(S.roomId==null)return;
   $('wait-room-id').textContent=S.roomId;
   const grid=$('seats-grid'); grid.innerHTML='';
+  let botCount=0;
   for(let s=0;s<4;s++){
     const p=S.players[s]; const d=document.createElement('div');
     d.className='seat'+(p?(p.connected?'':' off'):' empty');
-    if(p){ const nm=p.name||('玩家'+(s+1));
-      d.innerHTML='<div class="s-ava">'+escapeHtml(nm[0]||'?')+'</div><div class="s-name">'+escapeHtml(nm)+(s===S.mySeat?'<i class="you">你</i>':'')+'</div><div class="s-state">'+(p.connected?'已就绪':'已断线')+'</div>';
+    if(p){ if(p.bot)botCount++;
+      const nm=p.name||('玩家'+(s+1));
+      const tag=s===S.mySeat?'<i class="you">你</i>':(p.bot?'<i class="bot-tag">🤖 AI</i>':'');
+      d.innerHTML='<div class="s-ava">'+(p.bot?'🤖':escapeHtml(nm[0]||'?'))+'</div><div class="s-name">'+escapeHtml(nm)+tag+'</div><div class="s-state">'+(p.bot?'AI 玩家':(p.connected?'已就绪':'已断线'))+'</div>';
     } else d.innerHTML='<div class="s-ava">?</div><div class="s-name muted">空位</div><div class="s-state">等待加入</div>';
     grid.appendChild(d);
   }
   const n=Object.keys(S.players).length, hint=$('wait-hint');
-  hint.textContent=n>=4?'满 4 人！即将自动开局…':'等待玩家加入…（'+n+'/4）';
+  const aiTxt=botCount>0?'（含 AI）':'';
+  hint.textContent=n>=4?('满 4 人！即将自动开局…'+aiTxt):('等待玩家加入…（'+n+'/4）'+aiTxt);
   hint.classList.toggle('ready',n>=4);
+  updateBotBtn();
 }
 function renderTable(){ if(S.roomId==null)return; renderPlates(); renderCenter(); renderHand(); renderActions(); }
 function renderPlates(){
@@ -314,6 +328,53 @@ function doJoin(){
   if(!S.connected){toast('未连接到服务器，请稍候…');return;}
   send({type:'join_room',room_id:rid});
 }
+/* ===== 等待房“添加 AI 玩家” ===== */
+function ensureWaitBotBtn(){
+  let btn=$('btn-add-bot');
+  if(!btn){
+    btn=document.createElement('button');
+    btn.id='btn-add-bot'; btn.type='button';
+    btn.style.cssText='display:block;margin:10px auto 0;padding:10px 16px;';
+    btn.textContent='➕ 添加 AI 玩家';
+    btn.addEventListener('click',doAddBot);
+    const anchor=$('wait-hint');
+    if(anchor&&anchor.parentNode)anchor.insertAdjacentElement('afterend',btn);
+    else { const v=$('view-waiting'); if(v)v.appendChild(btn); }
+  }
+  updateBotBtn();
+}
+function updateBotBtn(){
+  const btn=$('btn-add-bot'); if(!btn)return;
+  const inWaiting=S.roomId!=null&&S.phase==='waiting';
+  btn.style.display=inWaiting?'block':'none';
+  if(!inWaiting)return;
+  const n=Object.keys(S.players).length;
+  btn.disabled=(n>=4);
+  btn.textContent=n>=4?'AI 已满员（4/4）':'➕ 添加 AI 玩家';
+}
+function doAddBot(){
+  if(!S.connected){toast('未连接到服务器，请稍候…');return;}
+  if(S.phase!=='waiting'){toast('对局已开始，无法添加 AI');return;}
+  if(Object.keys(S.players).length>=4){toast('房间已满（4/4）');return;}
+  send({type:'add_bot',count:1});
+}
+function doCreateWithBots(){
+  if(!readName())return;
+  if(!S.connected){toast('未连接到服务器，请稍候…');return;}
+  send({type:'create_room',bots:3});
+}
+function setupCreateBotsBtn(){
+  let b=$('btn-create-bots');
+  if(!b){
+    b=document.createElement('button');
+    b.id='btn-create-bots'; b.type='button';
+    b.style.cssText='margin-left:8px;';
+    b.textContent='创建房间 + 3 AI';
+    b.addEventListener('click',doCreateWithBots);
+    const c=$('btn-create');
+    if(c&&c.parentNode)c.insertAdjacentElement('afterend',b);
+  }
+}
 function doPlay(){
   if(S.phase!=='playing'||S.turnSeat!==S.mySeat)return;
   if(S.finishedSeats.has(S.mySeat))return;
@@ -338,7 +399,9 @@ function init(){
   $('room-input').addEventListener('keydown',e=>{ if(e.key==='Enter')doJoin(); });
   $('name-input').addEventListener('keydown',e=>{ if(e.key==='Enter')e.target.blur(); });
   $('btn-create').addEventListener('click',doCreate);
+  setupCreateBotsBtn();
   $('btn-join').addEventListener('click',doJoin);
+  ensureWaitBotBtn();
   $('btn-leave').addEventListener('click',()=>{ if(!send({type:'leave_room'}))toast('未连接到服务器'); });
   $('btn-play').addEventListener('click',doPlay);
   $('btn-pass').addEventListener('click',doPass);
