@@ -12,6 +12,8 @@ const $  = id => document.getElementById(id);
 const qs = k => new URLSearchParams(location.search).get(k);
 const suitOf = id => Math.floor(id/13);
 const rankOf = id => id%13+3;
+// 排序：先按点数，同点数再按花色（♣<♦<♥<♠）
+const cmpCard = (a,b) => { const ra=rankOf(a), rb=rankOf(b); return ra!==rb ? ra-rb : suitOf(a)-suitOf(b); };
 const rankText = r => RANK_CH[r]||String(r);
 const cardName = id => SUIT_CH[suitOf(id)]+rankText(rankOf(id));
 const isRedSuit = s => s===1||s===2;
@@ -108,7 +110,7 @@ function onGameStarted(m){
 }
 function onYourHand(m){
   if(m.room_id!==S.roomId)return;
-  S.mySeat=m.seat; S.hand=(m.hand||[]).slice().sort((a,b)=>a-b); S.selected.clear();
+  S.mySeat=m.seat; S.hand=(m.hand||[]).slice().sort(cmpCard); S.selected.clear();
   if(m.turn_seat!=null)S.turnSeat=m.turn_seat;
   hideResult(); showView('table'); renderTable();
 }
@@ -242,7 +244,7 @@ function renderCenter(){
   if(S.phase!=='playing'&&S.phase!=='over'){ cp.innerHTML=''; renderPill(); return; }
   if(S.lastPlay&&S.lastPlay.cards&&S.lastPlay.cards.length){
     const who=(S.lastPlay.seat===S.mySeat)?'你':seatName(S.lastPlay.seat);
-    cp.innerHTML='<div class="cp-who">'+escapeHtml(who)+' 出的牌</div><div class="cp-cards">'+S.lastPlay.cards.slice().sort((a,b)=>a-b).map(cardHTML).join('')+'</div>';
+    cp.innerHTML='<div class="cp-who">'+escapeHtml(who)+' 出的牌</div><div class="cp-cards">'+S.lastPlay.cards.slice().sort(cmpCard).map(cardHTML).join('')+'</div>';
   } else if(S.turnSeat!=null){
     const who=(S.turnSeat===S.mySeat)?'你':seatName(S.turnSeat);
     cp.innerHTML='<div class="cp-who muted">'+(S.roundSeq>1?'新一轮 · ':'')+'等待 '+escapeHtml(who)+' 领出</div>';
