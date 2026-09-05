@@ -12,8 +12,10 @@ const $  = id => document.getElementById(id);
 const qs = k => new URLSearchParams(location.search).get(k);
 const suitOf = id => Math.floor(id/13);
 const rankOf = id => id%13+3;
-// 排序：先按点数，同点数再按花色（♣<♦<♥<♠）
-const cmpCard = (a,b) => { const ra=rankOf(a), rb=rankOf(b); return ra!==rb ? ra-rb : suitOf(a)-suitOf(b); };
+// 花色大小：♥>♠>♦>♣（对应值 3>2>1>0，注意 ♠=id3 → 值2，♥=id2 → 值3）
+const suitVal = id => { const s = suitOf(id); return s===3 ? 2 : s===2 ? 3 : s; };
+// 排序：先按点数升序；同点数再按花色大小降序（♥ 在前）
+const cmpCard = (a,b) => { const ra=rankOf(a), rb=rankOf(b); if(ra!==rb) return ra-rb; return suitVal(b)-suitVal(a); };
 const rankText = r => RANK_CH[r]||String(r);
 const cardName = id => SUIT_CH[suitOf(id)]+rankText(rankOf(id));
 const isRedSuit = s => s===1||s===2;
